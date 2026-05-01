@@ -931,7 +931,6 @@ else:
             st.title("🤖 必要人数 ＆ 必要平均レベルの設定")
             tab_base, tab_special = st.tabs(["📅 基本の曜日・祝日設定", "📌 手動の特例日設定"])
             
-            # ★データが存在しない場合の初期化
             if "required_level" not in st.session_state:
                 st.session_state.required_level = {day: {str(h): 5.0 for h in range(6, 25)} for day in req_days}
                 
@@ -940,17 +939,19 @@ else:
                 req_dict = st.session_state.required_staff[selected_day]
                 lvl_dict = st.session_state.required_level.get(selected_day, {str(h): 5.0 for h in range(6, 25)})
                 
-                # ★ 人数とレベルの両方を表に表示する
                 df_req = pd.DataFrame([{"時間帯": f"{h}:00 〜 {h+1}:00", "必要人数": req_dict[str(h)], "必要平均レベル": lvl_dict.get(str(h), 5.0)} for h in range(6, 25)])
                 edited_req = st.data_editor(df_req, hide_index=True, use_container_width=True)
                 
                 if st.button(f"基本の {selected_day} の設定を保存", use_container_width=True):
                     for i, h in enumerate(range(6, 25)): 
                         st.session_state.required_staff[selected_day][str(h)] = int(edited_req.iloc[i]["必要人数"])
-                        if selected_day not in st.session_state.required_level: st.session_state.required_level[selected_day] = {}
+                        if selected_day not in st.session_state.required_level:
+                            st.session_state.required_level[selected_day] = {}
                         st.session_state.required_level[selected_day][str(h)] = float(edited_req.iloc[i]["必要平均レベル"])
-                    save_data(); st.success(f"{selected_day} の設定を保存しました！"); st.rerun()
-
+                    save_data()
+                    st.success(f"{selected_day} の設定を保存しました！")
+                    st.rerun()
+        
             with tab_special:
                 sp_date = st.date_input("設定する日付を選択（カレンダー）", today)
                 sp_date_str = sp_date.strftime("%Y/%m/%d")
@@ -969,11 +970,15 @@ else:
                 c1, c2 = st.columns(2)
                 if c1.button(f"この日の特例設定を保存", use_container_width=True):
                     st.session_state.special_required_staff[sp_date_str] = {str(h): int(edited_req_sp.iloc[i]["必要人数"]) for i, h in enumerate(range(6, 25))}
-                    save_data(); st.success("保存しました！"); st.rerun()
+                    save_data()
+                    st.success("保存しました！")
+                    st.rerun()
                 if c2.button("特例設定を解除（基本に戻す）", use_container_width=True):
                     if sp_date_str in st.session_state.special_required_staff:
                         del st.session_state.special_required_staff[sp_date_str]
-                        save_data(); st.success("解除しました！"); st.rerun()
+                        save_data()
+                        st.success("解除しました！")
+                        st.rerun()
 
         elif mode == "給与・勤怠管理":
             st.title("💰 管理者画面：月別 給与・勤怠管理")
