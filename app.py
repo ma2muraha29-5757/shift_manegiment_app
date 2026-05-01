@@ -1183,7 +1183,7 @@ else:
                 
             # 選んだ週のデータがまだ無ければ、初期値（例: 9:00〜17:00）を作る
             if week_key not in st.session_state.time_requests[name]:
-                st.session_state.time_requests[name][week_key] = {d: (9.0, 17.0) for d in days}
+                st.session_state.time_requests[name][week_key] = {d: (6.0, 6.0) for d in days}
 
             # 選んだ週のデータを user_times に取り出す
             user_times = st.session_state.time_requests[name][week_key]
