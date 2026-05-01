@@ -184,7 +184,7 @@ if 'employees' not in st.session_state:
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.current_user = None
-    st.session_state.is_admin = False # ✅ これが管理者画面への「鍵」になります
+    st.session_state.is_admin = False
 
 def save_staff_data(staff_name):
     """スタッフが自分の希望(time_requests)と勤務記録(work_records)だけを更新する"""
@@ -212,7 +212,7 @@ if not st.session_state.logged_in:
         """)
 
         with st.form("login_form"):
-            username = st.text_input("ユーザーID / メールアドレス")
+            username = st.text_input("ユーザーID")
             password = st.text_input("パスワード", type="password")
             submitted = st.form_submit_button("ログイン", use_container_width=True)
             
@@ -346,6 +346,9 @@ else:
     if st.sidebar.button("ログアウト"):
         st.session_state.logged_in = False
         st.session_state.current_user = None
+        st.rerun()
+    if st.sidebar.button("🔄 データを更新"):
+        del st.session_state.employees
         st.rerun()
     st.sidebar.divider()
 
