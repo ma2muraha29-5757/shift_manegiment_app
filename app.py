@@ -380,7 +380,7 @@ else:
                         week_data = user_all_reqs[latest_key] if isinstance(user_all_reqs[latest_key], dict) else user_all_reqs
                     
                     # 曜日ごとの希望時間を取得。データがなければ 9:00〜24:00 をデフォルトに
-                    req = week_data.get(base_day, (9.0, 24.0))
+                    req = week_data.get(base_day, (6.0, 6.0))
                     
                     # 店長の調整用データとして保存
                     st.session_state.daily_adjusted_times[date_str][name] = req
