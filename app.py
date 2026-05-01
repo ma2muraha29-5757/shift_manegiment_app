@@ -928,11 +928,6 @@ else:
             display_participation_summary()
 
         elif mode == "AI設定":
-            try:
-                st.title("🤖 必要人数 ＆ 必要平均レベルの設定")
-                # ... 以下いつものコード ...
-            except Exception as e:
-                st.error(f"エラー: {e}")  # ← 一時的に表示させる
             st.title("🤖 必要人数 ＆ 必要平均レベルの設定")
             tab_base, tab_special = st.tabs(["📅 基本の曜日・祝日設定", "📌 手動の特例日設定"])
             
@@ -956,7 +951,6 @@ else:
                     save_data()
                     st.success(f"{selected_day} の設定を保存しました！")
                     st.rerun()
-        
             with tab_special:
                 sp_date = st.date_input("設定する日付を選択（カレンダー）", today)
                 sp_date_str = sp_date.strftime("%Y/%m/%d")
