@@ -21,7 +21,7 @@ try:
     from satisfaction_model import SatisfactionModel
     
     satisfaction_ai = SatisfactionModel()
-    satisfaction_ai.eval() # 推論モード
+    satisfaction_ai.eval()
     PYTORCH_AVAILABLE = True
 except Exception as e:
     PYTORCH_AVAILABLE = False
@@ -1187,7 +1187,6 @@ else:
             # 選んだ週のデータがまだ無ければ、初期値（例: 9:00〜17:00）を作る
             if week_key not in st.session_state.time_requests[name]:
                 st.session_state.time_requests[name][week_key] = {d: (6.0, 6.0) for d in days}
-
             # 選んだ週のデータを user_times に取り出す
             user_times = st.session_state.time_requests[name][week_key]
 
@@ -1254,13 +1253,9 @@ else:
             
             st.write("") 
             if st.button("基本希望を保存して提出", use_container_width=True, type="primary"):
-                for i, day in enumerate(days):
-                    current_date = target_monday + datetime.timedelta(days=i)
-                    d_str = current_date.strftime("%Y/%m/%d") # 2026/04/20 形式
-                    times = user_times[day]
-                    st.session_state.time_requests[name][d_str] = times
+                st.session_state.time_requests[name][week_key] = user_times  # week_keyで保存
                 save_staff_data(name)
-                st.success(f"✅ {selected_week_label} の希望を提出しました！") 
+                st.success(f"✅ {selected_week_label} の希望を提出しました！")
 
         with tab2:
             st.title(f"📅 {name} さんの月別タイムカード")
