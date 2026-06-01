@@ -385,9 +385,7 @@ else:
                     
                     # 💡 指定した週のデータを探す。なければ一番新しい週を借りる
                     week_data = user_all_reqs.get(week_key, {})
-                    if not week_data and user_all_reqs:
-                        latest_key = list(user_all_reqs.keys())[-1]
-                        week_data = user_all_reqs[latest_key] if isinstance(user_all_reqs[latest_key], dict) else user_all_reqs
+                    
                     
                     # 曜日ごとの希望時間を取得。データがなければ 9:00〜24:00 をデフォルトに
                     req = week_data.get(base_day, (6.0, 6.0))
@@ -618,11 +616,6 @@ else:
                     # 3. 指定した週のデータを探す
                     week_data = user_all_reqs.get(week_key_graph, {})
                     
-                    # 4. もし今週分がなければ、一番新しい提出分を予備で使う
-                    if not week_data and user_all_reqs:
-                        latest_key = list(user_all_reqs.keys())[-1]
-                        # 辞書形式なら中身を、そうでなければ(古い形式)そのまま使う
-                        week_data = user_all_reqs[latest_key] if isinstance(user_all_reqs[latest_key], dict) else user_all_reqs
                     
                     # 5. その日の希望時間を取得（データが全くなければ休み扱い）
                     if isinstance(week_data, dict):
@@ -702,10 +695,6 @@ else:
                         
                         # 指定週のデータを取得
                         week_data = user_all_reqs.get(week_key, {})
-                        if not week_data and user_all_reqs:
-                            # 辞書形式なら最新の週を、そうでなければ全体を
-                            latest_key = list(user_all_reqs.keys())[-1]
-                            week_data = user_all_reqs[latest_key] if isinstance(user_all_reqs[latest_key], dict) else user_all_reqs
                         
                         # 曜日ごとの希望時間を取得（データなしは 6.0, 6.0）
                         req_start, req_end = week_data.get(date_str) or \
@@ -778,9 +767,6 @@ else:
                             
                             # 週データの取得
                             w_data = u_reqs.get(w_key, {})
-                            if not w_data and u_reqs:
-                                l_key = list(u_reqs.keys())[-1]
-                                w_data = u_reqs[l_key] if isinstance(u_reqs[l_key], dict) else u_reqs
                             
                             r_s, r_e = w_data.get(base_day, (6.0, 6.0))
                             
