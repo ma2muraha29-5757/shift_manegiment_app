@@ -361,7 +361,8 @@ else:
         if mode == "シフト作成（グラフ操作）":
             st.title("⚙️ 管理者画面：AIシフト作成 ＆ 調整")
             
-            target_date = st.date_input("📅 基準となる日付を選択（この日が含まれる1週間を計算します）", today)
+            next_monday = today + datetime.timedelta(days=(7 - today.weekday()))
+            target_date = st.date_input("...", next_monday)
             
             date_str = target_date.strftime("%Y/%m/%d")
             base_day = days[target_date.weekday()]
@@ -1166,11 +1167,11 @@ else:
             # ==========================================
             today = datetime.date.today()
             this_monday = today - datetime.timedelta(days=today.weekday())
-            
+            next_monday = this_monday + datetime.timedelta(weeks=1)
             week_options = {
-                f"今週 ({this_monday.strftime('%m/%d')}〜)": this_monday,
-                f"来週 ({(this_monday + datetime.timedelta(weeks=1)).strftime('%m/%d')}〜)": this_monday + datetime.timedelta(weeks=1),
-                f"再来週 ({(this_monday + datetime.timedelta(weeks=2)).strftime('%m/%d')}〜)": this_monday + datetime.timedelta(weeks=2),
+                f"来週 ({next_monday.strftime('%m/%d')}〜)": next_monday,
+                f"再来週 ({(next_monday + datetime.timedelta(weeks=1)).strftime('%m/%d')}〜)": next_monday + datetime.timedelta(weeks=1),
+                f"3週間後 ({(next_monday + datetime.timedelta(weeks=2)).strftime('%m/%d')}〜)": next_monday + datetime.timedelta(weeks=2),
             }
             
             selected_week_label = st.selectbox("入力する週を選んでください", list(week_options.keys()))
