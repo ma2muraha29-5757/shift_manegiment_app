@@ -362,13 +362,19 @@ else:
             st.title("⚙️ 管理者画面：AIシフト作成 ＆ 調整")
             
             target_date = st.date_input("📅 基準となる日付を選択（この日が含まれる1週間を計算します）", today)
+            
             date_str = target_date.strftime("%Y/%m/%d")
             base_day = days[target_date.weekday()]
             holiday_name = jpholiday.is_holiday_name(target_date)
                         
             if date_str not in st.session_state.daily_adjusted_times:
                 st.session_state.daily_adjusted_times[date_str] = {}
-                
+                week_key_admin = (target_date - datetime.timedelta(days=target_date.weekday())).strftime('%Y-%m-%d')
+                for name in st.session_state.employees["名前"]:
+                    if name not in st.session_state.time_requests:
+                        st.session_state.time_requests[name] = {}
+                    if week_key_admin not in st.session_state.time_requests[name]:
+                        st.session_state.time_requests[name][week_key_admin] = {d: (6.0, 6.0) for d in days}
                 # 今選んでいる日付が属する「週（月曜日）」のキーを計算
                 target_monday = target_date - datetime.timedelta(days=target_date.weekday())
                 week_key = target_monday.strftime('%Y-%m-%d')
