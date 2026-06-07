@@ -956,11 +956,17 @@ else:
                         shifts = st.session_state.daily_adjusted_times.get(day_padded, {})
                         if not shifts: # 0ありでなければ0なしで探す
                             shifts = st.session_state.daily_adjusted_times.get(day_simple, {})
-                            
-                        if name in shifts:
-                            active_count += 1
+
+                        removed = st.session_state.daily_removed_staff.get(day_padded, []) or \
+                                  st.session_state.daily_removed_staff.get(day_simple, [])
+
+                        # daily_adjusted_timesには全スタッフ分のデータが入っているため、
+                        # 「休みに変更されていない」かつ「実際に勤務時間がある」場合のみ出勤としてカウントする
+                        if name in shifts and name not in removed:
                             s, e = shifts[name]
-                            active_hours += (e - s)
+                            if e > s:
+                                active_count += 1
+                                active_hours += (e - s)
                     
                     summary_data.append({
                         "スタッフ名": name,
