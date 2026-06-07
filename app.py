@@ -943,21 +943,42 @@ else:
 
             st.divider()
             st.subheader(f"📥 {target_monday.strftime('%Y/%m/%d')}〜 の1週間分 Excel出力")
-            st.caption("選択中の週、7日分のシフト表を、曜日ごとのシートにまとめてダウンロードできます。")
+            st.caption("選択中の週、7日分のシフト表を、日付を左側に表示しながら1枚のシートに縦に並べてダウンロードできます。")
+
+            week_blocks = []
+            merge_ranges = []  # 同じ日付のセルを縦結合する範囲（Excel上の行番号、ヘッダーが1行目なのでデータは2行目から）
+            current_row = 2
+
+            for d_date in week_dates:
+                d_str = d_date.strftime("%Y/%m/%d")
+                d_label = f"{d_date.strftime('%m/%d')}（{days[d_date.weekday()]}）"
+                df_day = create_single_day_df(d_str).reset_index(drop=True)
+                df_day.insert(0, "日付", [d_label] + [""] * (len(df_day) - 1))
+
+                week_blocks.append(df_day)
+                merge_ranges.append((current_row, current_row + len(df_day) - 1))
+                current_row += len(df_day)
+
+            df_week = pd.concat(week_blocks, axis=0, ignore_index=True)
+            st.dataframe(df_week, use_container_width=True, hide_index=True)
 
             week_buffer = io.BytesIO()
             with pd.ExcelWriter(week_buffer, engine='openpyxl') as writer:
-                for d_date in week_dates:
-                    d_str = d_date.strftime("%Y/%m/%d")
-                    df_day = create_single_day_df(d_str)
-                    sheet_name = d_str.replace("/", "")
-                    df_day.to_excel(writer, sheet_name=sheet_name)
-                    worksheet = writer.sheets[sheet_name]
-                    worksheet.column_dimensions['A'].width = 10
-                    for col in worksheet.columns:
-                        col_letter = col[0].column_letter
-                        if col_letter != 'A':
-                            worksheet.column_dimensions[col_letter].width = 6
+                sheet_name = f"week_{week_key.replace('-', '')}"
+                df_week.to_excel(writer, sheet_name=sheet_name, index=False)
+                worksheet = writer.sheets[sheet_name]
+
+                worksheet.column_dimensions['A'].width = 14
+                for col in worksheet.columns:
+                    col_letter = col[0].column_letter
+                    if col_letter != 'A':
+                        worksheet.column_dimensions[col_letter].width = 8
+
+                from openpyxl.styles import Alignment
+                for start_row, end_row in merge_ranges:
+                    if end_row > start_row:
+                        worksheet.merge_cells(start_row=start_row, start_column=1, end_row=end_row, end_column=1)
+                    worksheet.cell(row=start_row, column=1).alignment = Alignment(vertical='center', horizontal='center')
 
             st.download_button(
                 label=f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の1週間分シフト表をダウンロード",
