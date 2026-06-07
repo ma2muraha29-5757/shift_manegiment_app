@@ -866,9 +866,7 @@ else:
                             continue
             st.divider()
             st.subheader(f"📥 {date_str} の1日分 Excel出力")
-            st.caption("完成したシフトを、15分刻みの詳細なExcelとしてダウンロードできます。")
-
-            time_cols = time_options
+            st.caption("完成したシフトを、1時間ごとのコマに区切ったExcelとしてダウンロードできます（出勤がちょうどの時間でない場合は、最初のコマに正確な時刻を表示します）。")
 
             def create_single_day_df(target_date_str):
                 working_staff = []
@@ -878,9 +876,9 @@ else:
                         a_s, a_e = tuple(day_adjustments_df.get(n, (6.0, 6.0)))
                         if a_s < a_e:
                             working_staff.append({"name": n, "start": float(a_s), "end": float(a_e)})
-                
+
                 working_staff.sort(key=lambda x: x["start"])
-                lanes, assignments = [], {} 
+                lanes, assignments = [], {}
 
                 for staff in working_staff:
                     assigned = False
@@ -895,19 +893,31 @@ else:
                         assignments[staff["name"]] = len(lanes) - 1
 
                 max_rows = len(lanes) if lanes else 1
-                matrix = [["" for _ in time_cols] for _ in range(max_rows)]
+                hour_range = list(range(6, 26))
+                hour_cols = [f"{h}:00" for h in hour_range]
+                matrix = [["" for _ in hour_cols] for _ in range(max_rows)]
+
+                def exact_time_label(t):
+                    # 17:30 → "1730" のように、ちょうどの時間でない出勤時刻を最初のコマへ書き込む表記
+                    h = int(t)
+                    m = int(round((t - h) * 60))
+                    return f"{h}{m:02d}"
 
                 for staff in working_staff:
                     row_idx = assignments[staff["name"]]
                     s, e = staff["start"], staff["end"]
-                    for col_idx, t_str in enumerate(time_cols):
-                        t_float = time_str_to_float(t_str)
-                        if t_float == s:
-                            matrix[row_idx][col_idx] = staff["name"]
-                        elif s < t_float < e:
-                            matrix[row_idx][col_idx] = "ー"
+                    for col_idx, h in enumerate(hour_range):
+                        cell_start, cell_end = float(h), float(h) + 1.0
+                        if s < cell_end and e > cell_start:
+                            if cell_start <= s < cell_end:
+                                if s == cell_start:
+                                    matrix[row_idx][col_idx] = staff["name"]
+                                else:
+                                    matrix[row_idx][col_idx] = f"{staff['name']} {exact_time_label(s)}〜"
+                            else:
+                                matrix[row_idx][col_idx] = "ー"
 
-                day_data = {time_cols[c]: [matrix[r][c] for r in range(max_rows)] for c in range(len(time_cols))}
+                day_data = {hour_cols[c]: [matrix[r][c] for r in range(max_rows)] for c in range(len(hour_cols))}
                 return pd.DataFrame(day_data, index=[f"{i+1}段目" for i in range(max_rows)])
 
             df_preview = create_single_day_df(date_str)
