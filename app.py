@@ -1246,7 +1246,7 @@ else:
                 
                 for n in valid_df["名前"]:
                     if n not in st.session_state.time_requests:
-                        st.session_state.time_requests[n] = {day: (9.0, 24.0) for day in days}
+                        st.session_state.time_requests[n] = {day: (6.0, 6.0) for day in days}
                     if n not in st.session_state.work_records:
                         st.session_state.work_records[n] = []
                             
