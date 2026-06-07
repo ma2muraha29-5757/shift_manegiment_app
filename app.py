@@ -146,7 +146,7 @@ def render_day_chart(chart_data, compact=False):
 
         tick_step = 6 if compact else 1
         fig.update_layout(
-            xaxis=dict(tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
+            xaxis=dict(title="", tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
             height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
             margin=dict(l=0, r=0, t=20, b=0),
             showlegend=(not compact),
