@@ -257,6 +257,10 @@ if 'employees' not in st.session_state:
         st.session_state.quick_buttons = []
         st.session_state.published_weeks = []
 
+# published_weeks は後から追加した項目のため、既存セッションにも個別に用意しておく
+if 'published_weeks' not in st.session_state:
+    st.session_state.published_weeks = []
+
 # --- 3. ログイン状態の初期化 ---
 if 'logged_in' not in st.session_state:
     st.session_state.logged_in = False
