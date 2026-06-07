@@ -1217,11 +1217,31 @@ else:
                 st.success("アカウント情報と時給設定を保存しました！")
 
             st.divider()
-            if st.button("全データを完全リセット（超注意）"):
-                # Firestore上のメインデータドキュメントを削除（スタッフ・シフト・希望などすべて消去）
-                db.collection("shift_management").document("main_data").delete()
-                st.session_state.clear()
-                st.rerun()
+            st.subheader("🚨 危険な操作")
+
+            if 'confirm_reset' not in st.session_state:
+                st.session_state.confirm_reset = False
+
+            if not st.session_state.confirm_reset:
+                if st.button("全データを完全リセット（超注意）"):
+                    st.session_state.confirm_reset = True
+                    st.rerun()
+            else:
+                st.error("⚠️ スタッフ・シフト・希望など、すべてのデータが完全に削除されます。この操作は取り消せません。")
+                confirm_text = st.text_input("実行するには「削除します」と入力してください", key="reset_confirm_text")
+
+                col_yes, col_no = st.columns(2)
+                with col_yes:
+                    if st.button("🗑️ 完全に削除する", type="primary", use_container_width=True,
+                                 disabled=(confirm_text != "削除します")):
+                        # Firestore上のメインデータドキュメントを削除（スタッフ・シフト・希望などすべて消去）
+                        db.collection("shift_management").document("main_data").delete()
+                        st.session_state.clear()
+                        st.rerun()
+                with col_no:
+                    if st.button("キャンセル", use_container_width=True):
+                        st.session_state.confirm_reset = False
+                        st.rerun()
 
     # ---------------------------------------------------------
     # 【スタッフモード】（ログイン中のスタッフの画面のみ）
