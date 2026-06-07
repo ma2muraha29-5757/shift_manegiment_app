@@ -36,7 +36,7 @@ def hash_password(password):
 def check_password(input_password, stored_hash):
     try:
         return bcrypt.checkpw(input_password.encode('utf-8'), stored_hash.encode('utf-8'))
-    except Exception:
+    except Exception as e:
         print(f"Password Check Error: {e}")
         return False
 
@@ -362,40 +362,36 @@ else:
             st.title("⚙️ 管理者画面：AIシフト作成 ＆ 調整")
             
             next_monday = today + datetime.timedelta(days=(7 - today.weekday()))
-            target_date = st.date_input("...", next_monday)
-            
-            date_str = target_date.strftime("%Y/%m/%d")
-            base_day = days[target_date.weekday()]
-            holiday_name = jpholiday.is_holiday_name(target_date)
-                        
-            if date_str not in st.session_state.daily_adjusted_times:
-                st.session_state.daily_adjusted_times[date_str] = {}
-                week_key_admin = (target_date - datetime.timedelta(days=target_date.weekday())).strftime('%Y-%m-%d')
-                for name in st.session_state.employees["名前"]:
-                    if name not in st.session_state.time_requests:
-                        st.session_state.time_requests[name] = {}
-                    if week_key_admin not in st.session_state.time_requests[name]:
-                        st.session_state.time_requests[name][week_key_admin] = {d: (6.0, 6.0) for d in days}
-                # 今選んでいる日付が属する「週（月曜日）」のキーを計算
-                target_monday = target_date - datetime.timedelta(days=target_date.weekday())
-                week_key = target_monday.strftime('%Y-%m-%d')
-                
-                for name in st.session_state.employees["名前"]:
-                    user_all_reqs = st.session_state.time_requests.get(name, {})
-                    
-                    # 💡 指定した週のデータを探す。なければ一番新しい週を借りる
-                    week_data = user_all_reqs.get(week_key, {})
-                    
-                    
-                    # 曜日ごとの希望時間を取得。データがなければ 9:00〜24:00 をデフォルトに
-                    req = week_data.get(base_day, (6.0, 6.0))
-                    
-                    # 店長の調整用データとして保存
-                    st.session_state.daily_adjusted_times[date_str][name] = req
+            target_date = st.date_input("週を選択してください（選んだ日付が含まれる週が対象になります）", next_monday)
 
-            if date_str not in st.session_state.daily_removed_staff:
-                st.session_state.daily_removed_staff[date_str] = []
-                
+            # --- 選択した日付が属する週（月曜〜日曜）の日付一覧を準備 ---
+            target_monday = target_date - datetime.timedelta(days=target_date.weekday())
+            week_dates = [target_monday + datetime.timedelta(days=i) for i in range(7)]
+            week_key = target_monday.strftime('%Y-%m-%d')
+
+            # 希望データの「週の枠」が無いスタッフ分を用意
+            for name in st.session_state.employees["名前"]:
+                if name not in st.session_state.time_requests:
+                    st.session_state.time_requests[name] = {}
+                if week_key not in st.session_state.time_requests[name]:
+                    st.session_state.time_requests[name][week_key] = {d: (6.0, 6.0) for d in days}
+
+            # 週内の各日について、調整用データ（店長調整・休み）を初期化
+            for d_date in week_dates:
+                d_str = d_date.strftime("%Y/%m/%d")
+                d_day = days[d_date.weekday()]
+
+                if d_str not in st.session_state.daily_adjusted_times:
+                    st.session_state.daily_adjusted_times[d_str] = {}
+                    for name in st.session_state.employees["名前"]:
+                        user_all_reqs = st.session_state.time_requests.get(name, {})
+                        week_data = user_all_reqs.get(week_key, {})
+                        req = week_data.get(d_day, (6.0, 6.0))
+                        st.session_state.daily_adjusted_times[d_str][name] = req
+
+                if d_str not in st.session_state.daily_removed_staff:
+                    st.session_state.daily_removed_staff[d_str] = []
+
             st.divider()
             
             # --- 1週間分の判定用関数 ---
@@ -441,10 +437,6 @@ else:
                         st.error("PyTorchモデルが読み込めていません。")
                     else:
                         with st.spinner('1週間分の最適シフトを計算中（人数ピッタリ・レベル維持・不満最小化）...'):
-                            # 1. ターゲットの週の日付取得
-                            start_of_week = target_date - datetime.timedelta(days=target_date.weekday())
-                            week_dates = [start_of_week + datetime.timedelta(days=i) for i in range(7)]
-                            
                             best_weekly_shifts = None
                             best_total_score = float('inf')
                             
@@ -456,6 +448,7 @@ else:
                                 current_weekly_shifts = {}
                                 for d_date in week_dates:
                                     d_str = d_date.strftime("%Y/%m/%d")
+                                    d_simple = f"{d_date.year}/{d_date.month}/{d_date.day}"
                                     d_day = days[d_date.weekday()]
                                     req_dict = get_req_dict(d_date)
                                     
@@ -564,8 +557,9 @@ else:
                             if best_weekly_shifts:
                                 for d_str, shifts in best_weekly_shifts.items():
                                     d_date = datetime.datetime.strptime(d_str, "%Y/%m/%d").date()
+                                    d_simple = f"{d_date.year}/{d_date.month}/{d_date.day}"
                                     d_day = days[d_date.weekday()]
-                                    
+
                                     if d_str not in st.session_state.daily_adjusted_times:
                                         st.session_state.daily_adjusted_times[d_str] = {}
                                     
@@ -598,78 +592,120 @@ else:
             
             st.divider()
 
-            col_graph, col_ctrl = st.columns([2, 1])
+            # ========================================================
+            # 📊 週間グラフ（曜日ごとのミニグラフを一覧表示）
+            # ========================================================
+            st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週間シフト")
 
-            with col_graph:
-                st.subheader(f"📊 {date_str} のシフト（調整用グラフ）")
-                
+            def build_day_chart_data(d_date):
+                d_str = d_date.strftime("%Y/%m/%d")
+                d_day = days[d_date.weekday()]
                 chart_data = []
-                off_staff = [] 
+                off_staff = []
                 for name in st.session_state.employees["名前"]:
-                    # 1. そのスタッフの全データを取得
                     user_all_reqs = st.session_state.time_requests.get(name, {})
-                    
-                    # 2. 今表示している日付の「月曜日」を特定
-                    target_monday_graph = target_date - datetime.timedelta(days=target_date.weekday())
-                    week_key_graph = target_monday_graph.strftime('%Y-%m-%d')
-                    
-                    # 3. 指定した週のデータを探す
-                    week_data = user_all_reqs.get(week_key_graph, {})
-                    
-                    
-                    # 5. その日の希望時間を取得（データが全くなければ休み扱い）
+                    week_data = user_all_reqs.get(week_key, {})
+
                     if isinstance(week_data, dict):
-                        req_start, req_end = week_data.get(base_day, (6.0, 6.0))
+                        req_start, req_end = week_data.get(d_day, (6.0, 6.0))
                     else:
                         req_start, req_end = (6.0, 6.0)
 
-                    # --- ここから下は元の「if req_start == req_end:」の処理に続きます ---
                     if req_start == req_end:
-                        off_staff.append(name) 
+                        off_staff.append(name)
                         continue
 
-                    
-                    # 取り出した結果、出勤時間と退勤時間が同じ（休み）ならリストから除外する
-                    if req_start == req_end:
-                        off_staff.append(name) 
-                        continue
-                        
-                    if name not in st.session_state.daily_removed_staff[date_str]:
-                        day_adjustments = st.session_state.daily_adjusted_times.get(date_str, {})
+                    if name not in st.session_state.daily_removed_staff.get(d_str, []):
+                        day_adjustments = st.session_state.daily_adjusted_times.get(d_str, {})
                         adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
                         if adj_start < adj_end:
                             lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
                             chart_data.append({
-                                "スタッフ名": name, 
-                                "開始": float(adj_start), 
-                                "終了": float(adj_end), 
-                                "レベル": f"Lv.{lvl}", 
+                                "スタッフ名": name,
+                                "開始": float(adj_start),
+                                "終了": float(adj_end),
+                                "レベル": f"Lv.{lvl}",
                                 "希望開始": float(req_start),
                                 "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
                             })
-                
+                return chart_data, off_staff
+
+            def render_day_chart(chart_data, compact=False):
                 if chart_data:
                     df_chart = pd.DataFrame(chart_data)
                     df_chart = df_chart.sort_values(by=["希望開始", "レベル"], ascending=[True, False])
-                    
+
                     fig = px.bar(
                         df_chart, x=df_chart["終了"] - df_chart["開始"], y="スタッフ名", base="開始",
-                        orientation='h', color="レベル", 
+                        orientation='h', color="レベル",
                         color_discrete_map={"Lv.1":"#87CEEB","Lv.2":"#4682B4","Lv.3":"#191970"},
                         hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True},
                         range_x=[6, 25]
                     )
-                    
+
+                    tick_step = 6 if compact else 1
                     fig.update_layout(
-                        xaxis=dict(tickmode='array', tickvals=[i for i in range(6, 26)], ticktext=[f"{i}:00" for i in range(6, 26)]), 
-                        height=max(400, len(chart_data) * 50),
-                        margin=dict(l=0, r=0, t=30, b=0),
+                        xaxis=dict(tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
+                        height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
+                        margin=dict(l=0, r=0, t=20, b=0),
+                        showlegend=(not compact),
                         yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1]}
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
-                    st.warning("この日に出勤予定のスタッフはいません。")
-                    
+                    if compact:
+                        st.caption("出勤予定なし")
+                    else:
+                        st.warning("この日に出勤予定のスタッフはいません。")
+
+            # 曜日ごとのミニグラフを4列＋3列で並べる
+            for row_start in range(0, 7, 4):
+                mini_cols = st.columns(min(4, 7 - row_start))
+                for j, mcol in enumerate(mini_cols):
+                    i = row_start + j
+                    d_date = week_dates[i]
+                    with mcol:
+                        st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
+                        mini_chart_data, _ = build_day_chart_data(d_date)
+                        render_day_chart(mini_chart_data, compact=True)
+
+            st.divider()
+
+            # ========================================================
+            # 🔍 曜日を選んで詳細調整
+            # ========================================================
+            st.subheader("🔍 曜日を選んで詳細を調整")
+
+            week_date_strs = [d.strftime("%Y/%m/%d") for d in week_dates]
+            if "shift_adjust_date" not in st.session_state or st.session_state.shift_adjust_date not in week_date_strs:
+                st.session_state.shift_adjust_date = week_date_strs[0]
+
+            day_btn_cols = st.columns(7)
+            for i, day_name in enumerate(days):
+                d_date = week_dates[i]
+                d_str = week_date_strs[i]
+                with day_btn_cols[i]:
+                    is_selected = (d_str == st.session_state.shift_adjust_date)
+                    if st.button(f"{day_name} {d_date.strftime('%m/%d')}", key=f"day_select_{d_str}",
+                                 use_container_width=True, type=("primary" if is_selected else "secondary")):
+                        st.session_state.shift_adjust_date = d_str
+                        st.rerun()
+
+            selected_date = datetime.datetime.strptime(st.session_state.shift_adjust_date, "%Y/%m/%d").date()
+            date_str = st.session_state.shift_adjust_date
+            base_day = days[selected_date.weekday()]
+            holiday_name = jpholiday.is_holiday_name(selected_date)
+
+            st.divider()
+
+            col_graph, col_ctrl = st.columns([2, 1])
+
+            with col_graph:
+                st.subheader(f"📊 {date_str} のシフト（調整用グラフ）")
+
+                chart_data, off_staff = build_day_chart_data(selected_date)
+                render_day_chart(chart_data, compact=False)
+
                 if off_staff:
                     st.caption(f"**本日休みのスタッフ:** {', '.join(off_staff)}")
 
@@ -690,9 +726,7 @@ else:
                                 return "9:00" # 万が一エラーが出ても止まらないようにする
                         # --- 1. データの準備（週対応） ---
                         user_all_reqs = st.session_state.time_requests.get(name, {})
-                        target_monday = target_date - datetime.timedelta(days=target_date.weekday())
-                        week_key = target_monday.strftime('%Y-%m-%d')
-                        
+
                         # 指定週のデータを取得
                         week_data = user_all_reqs.get(week_key, {})
                         
@@ -762,11 +796,9 @@ else:
                     for name in list(st.session_state.daily_removed_staff[date_str]):
                         try:
                             u_reqs = st.session_state.time_requests.get(name, {})
-                            t_monday = target_date - datetime.timedelta(days=target_date.weekday())
-                            w_key = t_monday.strftime('%Y-%m-%d')
-                            
+
                             # 週データの取得
-                            w_data = u_reqs.get(w_key, {})
+                            w_data = u_reqs.get(week_key, {})
                             
                             r_s, r_e = w_data.get(base_day, (6.0, 6.0))
                             
@@ -860,20 +892,26 @@ else:
             )
             
             def display_participation_summary():
-                st.subheader("📅 今週の勤務状況サマリー")
-                
-                # 1. 基準日をパース
+                # 1. 基準日をパース（その週の月曜日を起点にする）
                 base_date = datetime.datetime.strptime(date_str, "%Y/%m/%d")
-                
+                base_date = base_date - datetime.timedelta(days=base_date.weekday())
+
+                week_end = base_date + datetime.timedelta(days=6)
+                st.subheader(f"📅 勤務状況サマリー（{base_date.strftime('%Y/%m/%d')} 〜 {week_end.strftime('%Y/%m/%d')}）")
+
                 # 2. 0あり・0なし両方のパターンをリストに含めてしまう（マッチングの網を広げる）
                 target_week_days_padded = [] # "2026/04/17" 形式
                 target_week_days_simple = [] # "2026/4/17" 形式
-                
+
                 for i in range(7):
                     d = base_date + datetime.timedelta(days=i)
                     target_week_days_padded.append(d.strftime("%Y/%m/%d"))
                     target_week_days_simple.append(f"{d.year}/{d.month}/{d.day}")
-                
+
+                # 希望データは「週の月曜日(week_key)」→「曜日名」の2段構造で保存されているため、
+                # base_date（月曜日）からweek_keyを求めて参照する
+                week_key = base_date.strftime('%Y-%m-%d')
+
                 summary_data = []
                 
                 for _, row in st.session_state.employees.iterrows():
@@ -889,9 +927,11 @@ else:
                         day_simple = target_week_days_simple[i]
                         
                         # --- 希望の集計 ---
-                        # 0あり、0なし両方のキーで探し、ある方を採用する
-                        times = req_days.get(day_padded) or req_days.get(day_simple)
-                        
+                        # week_key（週の月曜日）→曜日名 の順でたどって希望時間を取得
+                        day_name = days[i]
+                        week_data = req_days.get(week_key, {})
+                        times = week_data.get(day_name) if isinstance(week_data, dict) else None
+
                         if isinstance(times, (list, tuple)) and len(times) == 2:
                             s, e = times
                             if s < e:
@@ -1132,9 +1172,9 @@ else:
 
             st.divider()
             if st.button("全データを完全リセット（超注意）"):
+                # Firestore上のメインデータドキュメントを削除（スタッフ・シフト・希望などすべて消去）
+                db.collection("shift_management").document("main_data").delete()
                 st.session_state.clear()
-                if os.path.exists(DATA_FILE):
-                    os.remove(DATA_FILE)
                 st.rerun()
 
     # ---------------------------------------------------------
