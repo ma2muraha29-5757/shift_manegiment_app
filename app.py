@@ -865,8 +865,6 @@ else:
                             print(f"DEBUG: Excel/Restore logic skip for {name}. Error: {e}")
                             continue
             st.divider()
-            st.subheader(f"📥 {date_str} の1日分 Excel出力")
-            st.caption("完成したシフトを、1時間ごとのコマに区切ったExcelとしてダウンロードできます（出勤がちょうどの時間でない場合は、最初のコマに正確な時刻を表示します）。")
 
             def create_single_day_df(target_date_str):
                 working_staff = []
@@ -920,28 +918,6 @@ else:
                 day_data = {hour_cols[c]: [matrix[r][c] for r in range(max_rows)] for c in range(len(hour_cols))}
                 return pd.DataFrame(day_data, index=[f"{i+1}段目" for i in range(max_rows)])
 
-            df_preview = create_single_day_df(date_str)
-            st.dataframe(df_preview, use_container_width=True)
-
-            buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                sheet_name = date_str.replace("/", "")
-                df_preview.to_excel(writer, sheet_name=sheet_name)
-                worksheet = writer.sheets[sheet_name]
-                worksheet.column_dimensions['A'].width = 10
-                for col in worksheet.columns:
-                    col_letter = col[0].column_letter
-                    if col_letter != 'A':
-                        worksheet.column_dimensions[col_letter].width = 6
-
-            st.download_button(
-                label=f"📊 {date_str}のシフト表をダウンロード",
-                data=buffer.getvalue(),
-                file_name=f"shift_{date_str.replace('/','')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            st.divider()
             st.subheader(f"📥 {target_monday.strftime('%Y/%m/%d')}〜 の1週間分 Excel出力")
             st.caption("選択中の週、7日分のシフト表を、日付を左側に表示しながら1枚のシートに縦に並べてダウンロードできます。")
 
@@ -949,7 +925,7 @@ else:
             merge_ranges = []  # 同じ日付のセルを縦結合する範囲（Excel上の行番号、ヘッダーが1行目なのでデータは2行目から）
             current_row = 2
 
-            for d_date in week_dates:
+            for idx, d_date in enumerate(week_dates):
                 d_str = d_date.strftime("%Y/%m/%d")
                 d_label = f"{d_date.strftime('%m/%d')}（{days[d_date.weekday()]}）"
                 df_day = create_single_day_df(d_str).reset_index(drop=True)
@@ -958,6 +934,11 @@ else:
                 week_blocks.append(df_day)
                 merge_ranges.append((current_row, current_row + len(df_day) - 1))
                 current_row += len(df_day)
+
+                if idx < len(week_dates) - 1:
+                    blank_row = pd.DataFrame([[""] * len(df_day.columns)], columns=df_day.columns)
+                    week_blocks.append(blank_row)
+                    current_row += 1
 
             df_week = pd.concat(week_blocks, axis=0, ignore_index=True)
             st.dataframe(df_week, use_container_width=True, hide_index=True)
