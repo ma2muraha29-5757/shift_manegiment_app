@@ -870,11 +870,11 @@ else:
 
             time_cols = time_options
 
-            def create_single_day_df():
+            def create_single_day_df(target_date_str):
                 working_staff = []
                 for n in st.session_state.employees["名前"]:
-                    if n not in st.session_state.daily_removed_staff[date_str]:
-                        day_adjustments_df = st.session_state.daily_adjusted_times.get(date_str, {})
+                    if n not in st.session_state.daily_removed_staff.get(target_date_str, []):
+                        day_adjustments_df = st.session_state.daily_adjusted_times.get(target_date_str, {})
                         a_s, a_e = tuple(day_adjustments_df.get(n, (6.0, 6.0)))
                         if a_s < a_e:
                             working_staff.append({"name": n, "start": float(a_s), "end": float(a_e)})
@@ -910,7 +910,7 @@ else:
                 day_data = {time_cols[c]: [matrix[r][c] for r in range(max_rows)] for c in range(len(time_cols))}
                 return pd.DataFrame(day_data, index=[f"{i+1}段目" for i in range(max_rows)])
 
-            df_preview = create_single_day_df()
+            df_preview = create_single_day_df(date_str)
             st.dataframe(df_preview, use_container_width=True)
 
             buffer = io.BytesIO()
@@ -923,14 +923,39 @@ else:
                     col_letter = col[0].column_letter
                     if col_letter != 'A':
                         worksheet.column_dimensions[col_letter].width = 6
-            
+
             st.download_button(
                 label=f"📊 {date_str}のシフト表をダウンロード",
                 data=buffer.getvalue(),
                 file_name=f"shift_{date_str.replace('/','')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             )
-            
+
+            st.divider()
+            st.subheader(f"📥 {target_monday.strftime('%Y/%m/%d')}〜 の1週間分 Excel出力")
+            st.caption("選択中の週、7日分のシフト表を、曜日ごとのシートにまとめてダウンロードできます。")
+
+            week_buffer = io.BytesIO()
+            with pd.ExcelWriter(week_buffer, engine='openpyxl') as writer:
+                for d_date in week_dates:
+                    d_str = d_date.strftime("%Y/%m/%d")
+                    df_day = create_single_day_df(d_str)
+                    sheet_name = d_str.replace("/", "")
+                    df_day.to_excel(writer, sheet_name=sheet_name)
+                    worksheet = writer.sheets[sheet_name]
+                    worksheet.column_dimensions['A'].width = 10
+                    for col in worksheet.columns:
+                        col_letter = col[0].column_letter
+                        if col_letter != 'A':
+                            worksheet.column_dimensions[col_letter].width = 6
+
+            st.download_button(
+                label=f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の1週間分シフト表をダウンロード",
+                data=week_buffer.getvalue(),
+                file_name=f"shift_week_{week_key}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+
             def display_participation_summary():
                 # 1. 基準日をパース（その週の月曜日を起点にする）
                 base_date = datetime.datetime.strptime(date_str, "%Y/%m/%d")
