@@ -85,6 +85,80 @@ def time_str_to_float(s):
 time_options = [f"{h}:{m:02d}" for h in range(6, 26) for m in (0, 15, 30, 45) if not (h == 25 and m > 0)]
 
 
+# =========================================================
+# 📊 シフトのグラフ表示用ヘルパー（管理者画面・スタッフ画面で共通利用）
+# =========================================================
+def build_day_chart_data(d_date, week_key):
+    d_str = d_date.strftime("%Y/%m/%d")
+    d_day = days[d_date.weekday()]
+    chart_data = []
+    off_staff = []
+    for name in st.session_state.employees["名前"]:
+        user_all_reqs = st.session_state.time_requests.get(name, {})
+        week_data = user_all_reqs.get(week_key, {})
+
+        if isinstance(week_data, dict):
+            req_start, req_end = week_data.get(d_day, (6.0, 6.0))
+        else:
+            req_start, req_end = (6.0, 6.0)
+
+        if req_start == req_end:
+            off_staff.append(name)
+            continue
+
+        if name not in st.session_state.daily_removed_staff.get(d_str, []):
+            day_adjustments = st.session_state.daily_adjusted_times.get(d_str, {})
+            adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
+            if adj_start < adj_end:
+                lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
+                chart_data.append({
+                    "スタッフ名": name,
+                    "開始": float(adj_start),
+                    "終了": float(adj_end),
+                    "レベル": f"Lv.{lvl}",
+                    "希望開始": float(req_start),
+                    "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
+                })
+
+    # グラフ表示順（希望開始が早い順、同じ場合はレベルが高い順）に並べたスタッフ名一覧
+    # 「手動での調整」側もこの順番に合わせて表示する
+    if chart_data:
+        ordered_names = pd.DataFrame(chart_data).sort_values(
+            by=["希望開始", "レベル"], ascending=[True, False]
+        )["スタッフ名"].tolist()
+    else:
+        ordered_names = []
+
+    return chart_data, off_staff, ordered_names
+
+def render_day_chart(chart_data, compact=False):
+    if chart_data:
+        df_chart = pd.DataFrame(chart_data)
+        df_chart = df_chart.sort_values(by=["希望開始", "レベル"], ascending=[True, False])
+
+        fig = px.bar(
+            df_chart, x=df_chart["終了"] - df_chart["開始"], y="スタッフ名", base="開始",
+            orientation='h', color="レベル",
+            color_discrete_map={"Lv.1":"#87CEEB","Lv.2":"#4682B4","Lv.3":"#191970"},
+            hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True},
+            range_x=[6, 25]
+        )
+
+        tick_step = 6 if compact else 1
+        fig.update_layout(
+            xaxis=dict(tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
+            height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
+            margin=dict(l=0, r=0, t=20, b=0),
+            showlegend=(not compact),
+            yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1], 'title': ''}
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        if compact:
+            st.caption("出勤予定なし")
+        else:
+            st.warning("この日に出勤予定のスタッフはいません。")
+
 
 # =========================================================
 # セーブ機能 (Firebase版)
@@ -119,7 +193,8 @@ def save_data(silent=False):
         "required_level": st.session_state.get("required_level", {}),
         "special_required_staff": st.session_state.special_required_staff,
         "quick_buttons": st.session_state.quick_buttons,
-        "previous_times": st.session_state.previous_times
+        "previous_times": st.session_state.previous_times,
+        "published_weeks": st.session_state.published_weeks
     }
     
     # Firestoreのドキュメントを更新
@@ -164,8 +239,9 @@ if 'employees' not in st.session_state:
         st.session_state.daily_adjusted_times = loaded_data.get("daily_adjusted_times", {})
         st.session_state.daily_removed_staff = loaded_data.get("daily_removed_staff", {})
         st.session_state.special_required_staff = loaded_data.get("special_required_staff", {})
-        st.session_state.previous_times = loaded_data.get("previous_times", {}) 
+        st.session_state.previous_times = loaded_data.get("previous_times", {})
         st.session_state.quick_buttons = loaded_data.get("quick_buttons", [])
+        st.session_state.published_weeks = loaded_data.get("published_weeks", [])
 
     else:
         # 初回起動時（Firestoreが空の場合）
@@ -177,8 +253,9 @@ if 'employees' not in st.session_state:
         st.session_state.daily_adjusted_times = {}
         st.session_state.daily_removed_staff = {}
         st.session_state.special_required_staff = {}
-        st.session_state.previous_times = {} 
+        st.session_state.previous_times = {}
         st.session_state.quick_buttons = []
+        st.session_state.published_weeks = []
 
 # --- 3. ログイン状態の初期化 ---
 if 'logged_in' not in st.session_state:
@@ -597,77 +674,6 @@ else:
             # ========================================================
             st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週間シフト")
 
-            def build_day_chart_data(d_date):
-                d_str = d_date.strftime("%Y/%m/%d")
-                d_day = days[d_date.weekday()]
-                chart_data = []
-                off_staff = []
-                for name in st.session_state.employees["名前"]:
-                    user_all_reqs = st.session_state.time_requests.get(name, {})
-                    week_data = user_all_reqs.get(week_key, {})
-
-                    if isinstance(week_data, dict):
-                        req_start, req_end = week_data.get(d_day, (6.0, 6.0))
-                    else:
-                        req_start, req_end = (6.0, 6.0)
-
-                    if req_start == req_end:
-                        off_staff.append(name)
-                        continue
-
-                    if name not in st.session_state.daily_removed_staff.get(d_str, []):
-                        day_adjustments = st.session_state.daily_adjusted_times.get(d_str, {})
-                        adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
-                        if adj_start < adj_end:
-                            lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
-                            chart_data.append({
-                                "スタッフ名": name,
-                                "開始": float(adj_start),
-                                "終了": float(adj_end),
-                                "レベル": f"Lv.{lvl}",
-                                "希望開始": float(req_start),
-                                "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
-                            })
-
-                # グラフ表示順（希望開始が早い順、同じ場合はレベルが高い順）に並べたスタッフ名一覧
-                # 「手動での調整」側もこの順番に合わせて表示する
-                if chart_data:
-                    ordered_names = pd.DataFrame(chart_data).sort_values(
-                        by=["希望開始", "レベル"], ascending=[True, False]
-                    )["スタッフ名"].tolist()
-                else:
-                    ordered_names = []
-
-                return chart_data, off_staff, ordered_names
-
-            def render_day_chart(chart_data, compact=False):
-                if chart_data:
-                    df_chart = pd.DataFrame(chart_data)
-                    df_chart = df_chart.sort_values(by=["希望開始", "レベル"], ascending=[True, False])
-
-                    fig = px.bar(
-                        df_chart, x=df_chart["終了"] - df_chart["開始"], y="スタッフ名", base="開始",
-                        orientation='h', color="レベル",
-                        color_discrete_map={"Lv.1":"#87CEEB","Lv.2":"#4682B4","Lv.3":"#191970"},
-                        hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True},
-                        range_x=[6, 25]
-                    )
-
-                    tick_step = 6 if compact else 1
-                    fig.update_layout(
-                        xaxis=dict(tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
-                        height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
-                        margin=dict(l=0, r=0, t=20, b=0),
-                        showlegend=(not compact),
-                        yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1], 'title': ''}
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    if compact:
-                        st.caption("出勤予定なし")
-                    else:
-                        st.warning("この日に出勤予定のスタッフはいません。")
-
             # 曜日ごとのミニグラフを4列＋3列で並べる
             for row_start in range(0, 7, 4):
                 mini_cols = st.columns(min(4, 7 - row_start))
@@ -676,8 +682,25 @@ else:
                     d_date = week_dates[i]
                     with mcol:
                         st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
-                        mini_chart_data, _, _ = build_day_chart_data(d_date)
+                        mini_chart_data, _, _ = build_day_chart_data(d_date, week_key)
                         render_day_chart(mini_chart_data, compact=True)
+
+            st.divider()
+
+            # --- このシフトをスタッフに公開する/取り消すボタン ---
+            is_published = week_key in st.session_state.published_weeks
+            publish_label = "🚫 このシフトの公開を取り消す" if is_published else "📢 このシフトをスタッフに公開する"
+            if st.button(publish_label, use_container_width=True, type=("secondary" if is_published else "primary")):
+                if is_published:
+                    st.session_state.published_weeks.remove(week_key)
+                else:
+                    st.session_state.published_weeks.append(week_key)
+                save_data()
+
+            if is_published:
+                st.success(f"✅ {target_monday.strftime('%Y/%m/%d')}〜 の週は、現在スタッフ画面に公開されています。")
+            else:
+                st.caption("※ まだこの週はスタッフ画面に公開されていません。")
 
             st.divider()
 
@@ -713,7 +736,7 @@ else:
             with col_graph:
                 st.subheader(f"📊 {date_str} のシフト（調整用グラフ）")
 
-                chart_data, off_staff, ordered_names = build_day_chart_data(selected_date)
+                chart_data, off_staff, ordered_names = build_day_chart_data(selected_date, week_key)
                 render_day_chart(chart_data, compact=False)
 
                 if off_staff:
@@ -1202,7 +1225,7 @@ else:
     else:
         name = st.session_state.current_user
         
-        tab1, tab2 = st.tabs(["📝 基本のシフト希望提出", "📅 月別タイムカード・給料"])
+        tab1, tab2, tab3 = st.tabs(["📝 基本のシフト希望提出", "📅 月別タイムカード・給料", "📊 確定シフトの確認"])
         
         with tab1:
             st.title(f"{name} さんのシフト希望入力")
@@ -1459,3 +1482,36 @@ else:
             total_salary = edited_month_records["日給(円)"].sum() if "日給(円)" in edited_month_records.columns else 0
             total_hours = edited_month_records["労働時間(H)"].sum() if "労働時間(H)" in edited_month_records.columns else 0
             st.info(f"✨ {selected_month}月の合計： **労働時間 {total_hours:.2f}H / 給料 {int(total_salary):,} 円**")
+
+        with tab3:
+            st.title("📊 確定シフトの確認")
+            st.caption("店長が「公開」したシフトの週だけ、ここで確認できます。")
+
+            # 公開されている週を新しい順に並べる
+            published_weeks_sorted = sorted(st.session_state.published_weeks, reverse=True)
+
+            if not published_weeks_sorted:
+                st.info("現在、公開されているシフトはありません。")
+            else:
+                week_labels = {}
+                for wk in published_weeks_sorted:
+                    wk_monday = datetime.datetime.strptime(wk, "%Y-%m-%d").date()
+                    wk_sunday = wk_monday + datetime.timedelta(days=6)
+                    week_labels[f"{wk_monday.strftime('%Y/%m/%d')} 〜 {wk_sunday.strftime('%Y/%m/%d')}"] = wk
+
+                selected_week_label_view = st.selectbox("確認する週を選んでください", list(week_labels.keys()))
+                view_week_key = week_labels[selected_week_label_view]
+                view_monday = datetime.datetime.strptime(view_week_key, "%Y-%m-%d").date()
+                view_week_dates = [view_monday + datetime.timedelta(days=i) for i in range(7)]
+
+                st.divider()
+
+                for row_start in range(0, 7, 4):
+                    mini_cols = st.columns(min(4, 7 - row_start))
+                    for j, mcol in enumerate(mini_cols):
+                        i = row_start + j
+                        d_date = view_week_dates[i]
+                        with mcol:
+                            st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
+                            mini_chart_data, _, _ = build_day_chart_data(d_date, view_week_key)
+                            render_day_chart(mini_chart_data, compact=True)
