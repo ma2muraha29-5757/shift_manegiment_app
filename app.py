@@ -628,7 +628,17 @@ else:
                                 "希望開始": float(req_start),
                                 "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
                             })
-                return chart_data, off_staff
+
+                # グラフ表示順（希望開始が早い順、同じ場合はレベルが高い順）に並べたスタッフ名一覧
+                # 「手動での調整」側もこの順番に合わせて表示する
+                if chart_data:
+                    ordered_names = pd.DataFrame(chart_data).sort_values(
+                        by=["希望開始", "レベル"], ascending=[True, False]
+                    )["スタッフ名"].tolist()
+                else:
+                    ordered_names = []
+
+                return chart_data, off_staff, ordered_names
 
             def render_day_chart(chart_data, compact=False):
                 if chart_data:
@@ -649,7 +659,7 @@ else:
                         height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
                         margin=dict(l=0, r=0, t=20, b=0),
                         showlegend=(not compact),
-                        yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1]}
+                        yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1], 'title': ''}
                     )
                     st.plotly_chart(fig, use_container_width=True)
                 else:
@@ -666,7 +676,7 @@ else:
                     d_date = week_dates[i]
                     with mcol:
                         st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
-                        mini_chart_data, _ = build_day_chart_data(d_date)
+                        mini_chart_data, _, _ = build_day_chart_data(d_date)
                         render_day_chart(mini_chart_data, compact=True)
 
             st.divider()
@@ -703,7 +713,7 @@ else:
             with col_graph:
                 st.subheader(f"📊 {date_str} のシフト（調整用グラフ）")
 
-                chart_data, off_staff = build_day_chart_data(selected_date)
+                chart_data, off_staff, ordered_names = build_day_chart_data(selected_date)
                 render_day_chart(chart_data, compact=False)
 
                 if off_staff:
@@ -713,9 +723,12 @@ else:
                 st.subheader("手動での調整")
                 st.caption("店長が調整できます。")
                 
-                # 💡 chart_data（グラフ表示者）ではなく、全スタッフの名前でループを回す
-                # これにより、特定のスタッフでエラーが起きても他のスタッフが表示されるようになります
-                for name in st.session_state.employees["名前"]:
+                # 💡 表示順は「調整用のグラフ」と同じ並び（希望開始が早い順→レベルが高い順）に統一
+                # グラフに出てこないスタッフ（休み・削除済みなど）は元の名簿順で末尾に追加する
+                all_names = st.session_state.employees["名前"].tolist()
+                display_order = ordered_names + [n for n in all_names if n not in ordered_names]
+
+                for name in display_order:
                     try:
                         def to_slider_str(f):
                             try:
