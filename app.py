@@ -129,28 +129,49 @@ def build_day_chart_data(d_date, week_key):
     else:
         ordered_names = []
 
+    # レーン分け：時間帯が重ならない人は同じ行にまとめて、グラフの縦の長さを抑える
+    lane_end_times = []
+    for item in sorted(chart_data, key=lambda x: x["開始"]):
+        assigned_lane = None
+        for lane_idx, lane_end in enumerate(lane_end_times):
+            if lane_end <= item["開始"]:
+                lane_end_times[lane_idx] = item["終了"]
+                assigned_lane = lane_idx
+                break
+        if assigned_lane is None:
+            lane_end_times.append(item["終了"])
+            assigned_lane = len(lane_end_times) - 1
+        item["レーン"] = assigned_lane
+
     return chart_data, off_staff, ordered_names
 
 def render_day_chart(chart_data, compact=False):
     if chart_data:
         df_chart = pd.DataFrame(chart_data)
         df_chart = df_chart.sort_values(by=["希望開始", "レベル"], ascending=[True, False])
+        df_chart["レーン"] = df_chart["レーン"].astype(str)
+        num_lanes = df_chart["レーン"].nunique()
+        lane_order = [str(i) for i in range(num_lanes)]
 
         fig = px.bar(
-            df_chart, x=df_chart["終了"] - df_chart["開始"], y="スタッフ名", base="開始",
+            df_chart, x=df_chart["終了"] - df_chart["開始"], y="レーン", base="開始",
             orientation='h', color="レベル",
             color_discrete_map={"Lv.1":"#87CEEB","Lv.2":"#4682B4","Lv.3":"#191970"},
-            hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True},
+            hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True, "レーン":False},
+            text="スタッフ名",
             range_x=[6, 25]
         )
+        fig.update_traces(textposition='inside', insidetextanchor='middle',
+                           textfont=dict(size=14, color="white", family="Arial Black"))
 
-        tick_step = 6 if compact else 1
+        tick_step = 3 if compact else 1
         fig.update_layout(
+            barmode='overlay',
             xaxis=dict(title="", tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
-            height=(len(chart_data) * 28 + 60) if compact else max(400, len(chart_data) * 50),
+            height=(num_lanes * 36 + 60) if compact else max(300, num_lanes * 60),
             margin=dict(l=0, r=0, t=20, b=0),
             showlegend=(not compact),
-            yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1], 'title': ''}
+            yaxis={'categoryorder':'array', 'categoryarray': lane_order[::-1], 'title': '', 'showticklabels': False}
         )
         fig.update_layout(dragmode=False)
         st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
