@@ -164,10 +164,11 @@ def render_day_chart(chart_data, compact=False):
         fig.update_traces(textposition='inside', insidetextanchor='middle', textangle=0,
                            textfont=dict(size=14, color="white", family="Arial Black"))
 
-        tick_step = 3 if compact else 1
+        # 1時間ごとに目盛を表示
+        tick_hours = list(range(6, 26, 1))
         fig.update_layout(
             barmode='overlay',
-            xaxis=dict(title="", tickmode='array', tickvals=list(range(6, 26, tick_step)), ticktext=[f"{i}:00" for i in range(6, 26, tick_step)]),
+            xaxis=dict(title="", tickmode='array', tickvals=tick_hours, ticktext=[f"{i}:00" for i in tick_hours]),
             height=(num_lanes * 36 + 60) if compact else max(300, num_lanes * 60),
             margin=dict(l=0, r=0, t=20, b=0),
             showlegend=(not compact),
@@ -701,8 +702,8 @@ else:
             st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週間シフト")
 
             # 曜日ごとのミニグラフを4列＋3列で並べる
-            for row_start in range(0, 7, 4):
-                mini_cols = st.columns(min(4, 7 - row_start))
+            for row_start in range(0, 7, 2):
+                mini_cols = st.columns(min(2, 7 - row_start))
                 for j, mcol in enumerate(mini_cols):
                     i = row_start + j
                     d_date = week_dates[i]
