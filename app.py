@@ -162,7 +162,8 @@ def render_day_chart(chart_data, compact=False):
             range_x=[6, 25]
         )
         fig.update_traces(textposition='inside', insidetextanchor='middle', textangle=0,
-                           textfont=dict(size=14, color="white", family="Arial Black"))
+                           textfont=dict(size=14, color="white", family="Arial Black"),
+                           marker_line_color="white", marker_line_width=2)
 
         # 1時間ごとに目盛を表示
         tick_hours = list(range(6, 26, 1))
@@ -1593,8 +1594,8 @@ else:
 
                 st.divider()
 
-                for row_start in range(0, 7, 4):
-                    mini_cols = st.columns(min(4, 7 - row_start))
+                for row_start in range(0, 7, 2):
+                    mini_cols = st.columns(min(2, 7 - row_start))
                     for j, mcol in enumerate(mini_cols):
                         i = row_start + j
                         d_date = view_week_dates[i]
