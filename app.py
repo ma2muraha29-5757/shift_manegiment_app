@@ -802,18 +802,48 @@ else:
                         req_start, req_end = week_data.get(date_str) or \
                                              week_data.get(base_day, (6.0, 6.0))
                         
-                        # 休みのスタッフは調整スライダーを出さない
-                        if name in st.session_state.daily_removed_staff[date_str] or req_start == req_end:
-                            continue
-
                         # 調整後の現在の値を取得
                         day_adjustments = st.session_state.daily_adjusted_times.get(date_str, {})
                         adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
 
+                        # 元々は希望を出していない日に、店長が「人手不足の追加出勤」で入れたスタッフかどうか
+                        is_manual_add = (req_start == req_end) and (adj_start < adj_end)
+
+                        # 休みのスタッフ・希望も追加出勤も無いスタッフは調整スライダーを出さない
+                        if name in st.session_state.daily_removed_staff[date_str]:
+                            continue
+                        if req_start == req_end and not is_manual_add:
+                            continue
+
                         # --- 2. スライダーの表示 ---
                         with st.container():
+                            if is_manual_add:
+                                # --- 追加出勤させたスタッフ専用の表示（時間調整＋取り消し） ---
+                                st.markdown(f"**{name}** (🆘 追加出勤・本来は希望なし)")
+
+                                adj_s_str, adj_e_str = to_slider_str(adj_start), to_slider_str(adj_end)
+                                final_s = adj_s_str if adj_s_str in time_options else "9:00"
+                                final_e = adj_e_str if adj_e_str in time_options else "17:00"
+
+                                new_adj_str = st.select_slider(
+                                    "時間調整", options=time_options, value=(final_s, final_e),
+                                    key=f"adj_extra_{date_str}_{name}", label_visibility="collapsed"
+                                )
+                                new_adj = (time_str_to_float(new_adj_str[0]), time_str_to_float(new_adj_str[1]))
+                                if new_adj != (adj_start, adj_end):
+                                    st.session_state.daily_adjusted_times[date_str][name] = new_adj
+                                    save_data()
+                                    st.rerun()
+
+                                if st.button(f"❌ {name}の追加出勤を取り消す", key=f"cancel_extra_{date_str}_{name}", use_container_width=True):
+                                    st.session_state.daily_adjusted_times[date_str][name] = (req_start, req_end)
+                                    save_data()
+                                    st.rerun()
+                                st.divider()
+                                continue
+
                             st.markdown(f"**{name}** (希望: {float_to_time_str(req_start)} 〜 {float_to_time_str(req_end)})")
-                            
+
                             # 文字列に変換
                             req_s_str, req_e_str = to_slider_str(req_start), to_slider_str(req_end)
                             adj_s_str, adj_e_str = to_slider_str(adj_start), to_slider_str(adj_end)
@@ -822,17 +852,17 @@ else:
                                 idx_s = time_options.index(req_s_str)
                                 idx_e = time_options.index(req_e_str)
                                 valid_options = time_options[idx_s : idx_e+1]
-                                
+
                                 if len(valid_options) > 1:
                                     # ガードレール：現在の調整値が選択肢にない場合は希望時間に合わせる
                                     final_s = adj_s_str if adj_s_str in valid_options else req_s_str
                                     final_e = adj_e_str if adj_e_str in valid_options else req_e_str
-                                    
+
                                     new_adj_str = st.select_slider(
                                         "時間調整", options=valid_options, value=(final_s, final_e),
                                         key=f"adj_vFinal_{date_str}_{name}", label_visibility="collapsed"
                                     )
-                                    
+
                                     # 保存と更新
                                     new_adj = (time_str_to_float(new_adj_str[0]), time_str_to_float(new_adj_str[1]))
                                     if new_adj != (adj_start, adj_end):
@@ -841,7 +871,7 @@ else:
                                         st.rerun()
                                 else:
                                     st.info("固定シフトのため調整不可")
-                            
+
                             # 個別の「休みに変更」ボタン
                             if st.button(f"❌ {name}を休みに変更", key=f"rem_btn_{date_str}_{name}", use_container_width=True):
                                 st.session_state.daily_removed_staff[date_str].append(name)
