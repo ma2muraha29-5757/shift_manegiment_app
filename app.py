@@ -537,9 +537,8 @@ else:
                                     daily_shifts = {}
                                     for name in st.session_state.employees["名前"]:
                                         person_requests = st.session_state.time_requests.get(name, {})
-                                        req_times = person_requests.get(d_str) or \
-                                                    person_requests.get(d_simple) or \
-                                                    person_requests.get(d_day, (0.0, 0.0))
+                                        week_data_req = person_requests.get(week_key, {})
+                                        req_times = week_data_req.get(d_day, (0.0, 0.0)) if isinstance(week_data_req, dict) else (0.0, 0.0)
                                         
                                         req_s, req_e = req_times
                                         if req_s < req_e:
@@ -614,7 +613,8 @@ else:
                                         
                                         s, e = current_weekly_shifts[d_str].get(name, (0.0, 0.0))
                                         worked_h = e - s
-                                        req_times = st.session_state.time_requests.get(name, {}).get(d_day, (0.0, 0.0))
+                                        week_data_req = st.session_state.time_requests.get(name, {}).get(week_key, {})
+                                        req_times = week_data_req.get(d_day, (0.0, 0.0)) if isinstance(week_data_req, dict) else (0.0, 0.0)
                                         req_s, req_e = req_times
                                         req_h = req_e - req_s
                                         
