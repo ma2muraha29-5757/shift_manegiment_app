@@ -102,23 +102,27 @@ def build_day_chart_data(d_date, week_key):
         else:
             req_start, req_end = (6.0, 6.0)
 
-        if req_start == req_end:
+        if name in st.session_state.daily_removed_staff.get(d_str, []):
             off_staff.append(name)
             continue
 
-        if name not in st.session_state.daily_removed_staff.get(d_str, []):
-            day_adjustments = st.session_state.daily_adjusted_times.get(d_str, {})
-            adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
-            if adj_start < adj_end:
-                lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
-                chart_data.append({
-                    "スタッフ名": name,
-                    "開始": float(adj_start),
-                    "終了": float(adj_end),
-                    "レベル": f"Lv.{lvl}",
-                    "希望開始": float(req_start),
-                    "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
-                })
+        day_adjustments = st.session_state.daily_adjusted_times.get(d_str, {})
+        adj_start, adj_end = tuple(day_adjustments.get(name, (req_start, req_end)))
+
+        if adj_start < adj_end:
+            lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
+            # 希望提出が無かった日でも、店長が手動で追加した場合はその開始時間で並び順を決める
+            sort_start = req_start if req_start < req_end else adj_start
+            chart_data.append({
+                "スタッフ名": name,
+                "開始": float(adj_start),
+                "終了": float(adj_end),
+                "レベル": f"Lv.{lvl}",
+                "希望開始": float(sort_start),
+                "表示時間": f"{float_to_time_str(adj_start)} 〜 {float_to_time_str(adj_end)}"
+            })
+        else:
+            off_staff.append(name)
 
     # グラフ表示順（希望開始が早い順、同じ場合はレベルが高い順）に並べたスタッフ名一覧
     # 「手動での調整」側もこの順番に合わせて表示する
@@ -888,6 +892,33 @@ else:
                         except Exception as e:
                             print(f"DEBUG: Excel/Restore logic skip for {name}. Error: {e}")
                             continue
+
+                # --- 4. 人手不足の時に追加で出勤してもらう ---
+                # 「今日は休み」と希望が出ているスタッフの中から、店長が時間を指定して追加出勤させる
+                extra_candidates = [
+                    n for n in off_staff
+                    if n not in st.session_state.daily_removed_staff.get(date_str, [])
+                ]
+                if extra_candidates:
+                    st.write("---")
+                    st.subheader("🆘 人手不足の時に追加で出勤させる")
+                    st.caption("今日休みの予定のスタッフを、時間を指定して追加で出勤させられます。")
+
+                    add_name = st.selectbox(
+                        "追加するスタッフ", extra_candidates, key=f"extra_staff_{date_str}"
+                    )
+                    add_start, add_end = st.select_slider(
+                        "出勤させる時間帯", options=time_options, value=("9:00", "17:00"),
+                        key=f"extra_time_{date_str}_{add_name}"
+                    )
+                    if st.button(f"➕ {add_name} を追加で出勤させる", key=f"extra_add_{date_str}_{add_name}", use_container_width=True):
+                        if date_str not in st.session_state.daily_adjusted_times:
+                            st.session_state.daily_adjusted_times[date_str] = {}
+                        st.session_state.daily_adjusted_times[date_str][add_name] = (
+                            time_str_to_float(add_start), time_str_to_float(add_end)
+                        )
+                        save_data()
+                        st.rerun()
 
             st.divider()
 
