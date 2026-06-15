@@ -161,7 +161,7 @@ def render_day_chart(chart_data, compact=False):
             text="スタッフ名",
             range_x=[6, 25]
         )
-        fig.update_traces(textposition='inside', insidetextanchor='middle',
+        fig.update_traces(textposition='inside', insidetextanchor='middle', textangle=0,
                            textfont=dict(size=14, color="white", family="Arial Black"))
 
         tick_step = 3 if compact else 1
