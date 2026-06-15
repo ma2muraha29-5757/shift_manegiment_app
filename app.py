@@ -152,7 +152,8 @@ def render_day_chart(chart_data, compact=False):
             showlegend=(not compact),
             yaxis={'categoryorder':'array', 'categoryarray': df_chart['スタッフ名'].tolist()[::-1], 'title': ''}
         )
-        st.plotly_chart(fig, use_container_width=True)
+        fig.update_layout(dragmode=False)
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
     else:
         if compact:
             st.caption("出勤予定なし")
