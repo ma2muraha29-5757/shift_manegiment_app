@@ -149,6 +149,46 @@ def build_day_chart_data(d_date, week_key):
 
     return chart_data, off_staff, ordered_names
 
+def build_day_request_chart_data(d_date, week_key):
+    """店長の調整前、スタッフ全員の「希望」だけを集めたグラフ用データ（スタッフ画面で公開）"""
+    d_day = days[d_date.weekday()]
+    chart_data = []
+    for name in st.session_state.employees["名前"]:
+        user_all_reqs = st.session_state.time_requests.get(name, {})
+        week_data = user_all_reqs.get(week_key, {})
+
+        if isinstance(week_data, dict):
+            req_start, req_end = week_data.get(d_day, (6.0, 6.0))
+        else:
+            req_start, req_end = (6.0, 6.0)
+
+        if req_start < req_end:
+            lvl = st.session_state.employees.loc[st.session_state.employees["名前"]==name, "レベル"].values[0]
+            chart_data.append({
+                "スタッフ名": name,
+                "開始": float(req_start),
+                "終了": float(req_end),
+                "レベル": f"Lv.{lvl}",
+                "希望開始": float(req_start),
+                "表示時間": f"{float_to_time_str(req_start)} 〜 {float_to_time_str(req_end)}"
+            })
+
+    # レーン分け：時間帯が重ならない人は同じ行にまとめる
+    lane_end_times = []
+    for item in sorted(chart_data, key=lambda x: x["開始"]):
+        assigned_lane = None
+        for lane_idx, lane_end in enumerate(lane_end_times):
+            if lane_end <= item["開始"]:
+                lane_end_times[lane_idx] = item["終了"]
+                assigned_lane = lane_idx
+                break
+        if assigned_lane is None:
+            lane_end_times.append(item["終了"])
+            assigned_lane = len(lane_end_times) - 1
+        item["レーン"] = assigned_lane
+
+    return chart_data
+
 def render_day_chart(chart_data, compact=False):
     if chart_data:
         df_chart = pd.DataFrame(chart_data)
@@ -719,9 +759,9 @@ else:
 
             st.divider()
 
-            # --- このシフトをスタッフに公開する/取り消すボタン ---
+            # --- このシフトを確定する/取り消すボタン ---
             is_published = week_key in st.session_state.published_weeks
-            publish_label = "🚫 このシフトの公開を取り消す" if is_published else "📢 このシフトをスタッフに公開する"
+            publish_label = "🚫 このシフトの確定を取り消す" if is_published else "✅ このシフトを確定する"
             if st.button(publish_label, use_container_width=True, type=("secondary" if is_published else "primary")):
                 if is_published:
                     st.session_state.published_weeks.remove(week_key)
@@ -730,9 +770,9 @@ else:
                 save_data()
 
             if is_published:
-                st.success(f"✅ {target_monday.strftime('%Y/%m/%d')}〜 の週は、現在スタッフ画面に公開されています。")
+                st.success(f"✅ {target_monday.strftime('%Y/%m/%d')}〜 の週は、現在確定済みです（スタッフ画面で確認できます）。")
             else:
-                st.caption("※ まだこの週はスタッフ画面に公開されていません。")
+                st.caption("※ まだこの週は確定されていません。")
 
             st.divider()
 
@@ -1414,6 +1454,26 @@ else:
             # 選んだ週のデータを user_times に取り出す
             user_times = st.session_state.time_requests[name][week_key]
 
+            # ==========================================
+            # 📊 この週のみんなの希望状況（足りていない日がわかる）
+            # ==========================================
+            st.divider()
+            st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週のみんなの希望状況")
+            st.caption("みんなの希望を見て、不足している日や時間帯がないか確認してから希望を出してください。")
+
+            week_dates_for_request = [target_monday + datetime.timedelta(days=i) for i in range(7)]
+            for row_start in range(0, 7, 2):
+                req_cols = st.columns(min(2, 7 - row_start))
+                for j, rcol in enumerate(req_cols):
+                    i = row_start + j
+                    d_date = week_dates_for_request[i]
+                    with rcol:
+                        st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
+                        req_chart_data = build_day_request_chart_data(d_date, week_key)
+                        render_day_chart(req_chart_data, compact=True)
+
+            st.divider()
+
             for i, day in enumerate(days):
                 # 📅 追加：ループの中でその曜日の日付を計算する
                 current_date = target_monday + datetime.timedelta(days=i)
@@ -1634,13 +1694,13 @@ else:
 
         with tab3:
             st.title("📊 確定シフトの確認")
-            st.caption("店長が「公開」したシフトの週だけ、ここで確認できます。")
+            st.caption("店長が「確定」したシフトの週だけ、ここで確認できます。")
 
-            # 公開されている週を新しい順に並べる
+            # 確定済みの週を新しい順に並べる
             published_weeks_sorted = sorted(st.session_state.published_weeks, reverse=True)
 
             if not published_weeks_sorted:
-                st.info("現在、公開されているシフトはありません。")
+                st.info("現在、確定しているシフトはありません。")
             else:
                 week_labels = {}
                 for wk in published_weeks_sorted:
