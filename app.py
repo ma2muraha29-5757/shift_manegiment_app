@@ -189,7 +189,7 @@ def build_day_request_chart_data(d_date, week_key):
 
     return chart_data
 
-def render_day_chart(chart_data, compact=False):
+def render_day_chart(chart_data, compact=False, key=None):
     if chart_data:
         df_chart = pd.DataFrame(chart_data)
         df_chart = df_chart.sort_values(by=["希望開始", "レベル"], ascending=[True, False])
@@ -220,7 +220,7 @@ def render_day_chart(chart_data, compact=False):
             yaxis={'categoryorder':'array', 'categoryarray': lane_order[::-1], 'title': '', 'showticklabels': False}
         )
         fig.update_layout(dragmode=False)
-        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False})
+        st.plotly_chart(fig, use_container_width=True, config={'staticPlot': True, 'displayModeBar': False}, key=key)
     else:
         if compact:
             st.caption("出勤予定なし")
@@ -755,7 +755,7 @@ else:
                     with mcol:
                         st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
                         mini_chart_data, _, _ = build_day_chart_data(d_date, week_key)
-                        render_day_chart(mini_chart_data, compact=True)
+                        render_day_chart(mini_chart_data, compact=True, key=f"mini_{week_key}_{d_date}")
 
             st.divider()
 
@@ -809,7 +809,7 @@ else:
                 st.subheader(f"📊 {date_str} のシフト（調整用グラフ）")
 
                 chart_data, off_staff, ordered_names = build_day_chart_data(selected_date, week_key)
-                render_day_chart(chart_data, compact=False)
+                render_day_chart(chart_data, compact=False, key=f"day_{week_key}_{selected_date}")
 
                 if off_staff:
                     st.caption(f"**本日休みのスタッフ:** {', '.join(off_staff)}")
@@ -1470,7 +1470,7 @@ else:
                     with rcol:
                         st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
                         req_chart_data = build_day_request_chart_data(d_date, week_key)
-                        render_day_chart(req_chart_data, compact=True)
+                        render_day_chart(req_chart_data, compact=True, key=f"req_{week_key}_{d_date}")
 
             st.divider()
 
@@ -1723,4 +1723,4 @@ else:
                         with mcol:
                             st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
                             mini_chart_data, _, _ = build_day_chart_data(d_date, view_week_key)
-                            render_day_chart(mini_chart_data, compact=True)
+                            render_day_chart(mini_chart_data, compact=True, key=f"view_{view_week_key}_{d_date}")
