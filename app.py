@@ -43,6 +43,27 @@ def check_password(input_password, stored_hash):
 # --- 1. ページ設定 ---
 st.set_page_config(page_title="AIシフト管理（PyTorch最適化対応）", layout="wide")
 
+st.markdown("""
+<style>
+/* スマホでカラムを縦積みにする */
+@media (max-width: 768px) {
+    [data-testid="column"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+    /* スライダーのタッチ操作しやすく */
+    [data-testid="stSlider"] > div {
+        padding: 8px 0;
+    }
+    /* テーブルのフォントを小さく */
+    [data-testid="stDataFrame"] {
+        font-size: 12px;
+    }
+}
+</style>
+""", unsafe_allow_html=True)
+
 # =========================================================
 # 🔥 Firebaseの初期化と接続
 # =========================================================
@@ -206,7 +227,7 @@ def render_day_chart(chart_data, compact=False, key=None):
             range_x=[6, 25]
         )
         fig.update_traces(textposition='inside', insidetextanchor='middle', textangle=0,
-                           textfont=dict(size=14, color="white", family="Arial Black"),
+                           textfont=dict(size=11, color="white", family="Arial Black"),
                            marker_line_color="white", marker_line_width=2)
 
         # 1時間ごとに目盛を表示
@@ -785,16 +806,14 @@ else:
             if "shift_adjust_date" not in st.session_state or st.session_state.shift_adjust_date not in week_date_strs:
                 st.session_state.shift_adjust_date = week_date_strs[0]
 
-            day_btn_cols = st.columns(7)
-            for i, day_name in enumerate(days):
-                d_date = week_dates[i]
-                d_str = week_date_strs[i]
-                with day_btn_cols[i]:
-                    is_selected = (d_str == st.session_state.shift_adjust_date)
-                    if st.button(f"{day_name} {d_date.strftime('%m/%d')}", key=f"day_select_{d_str}",
-                                 use_container_width=True, type=("primary" if is_selected else "secondary")):
-                        st.session_state.shift_adjust_date = d_str
-                        st.rerun()
+            day_options = {
+                f"{days[i]} {week_dates[i].strftime('%m/%d')}": week_date_strs[i]
+                for i in range(7)
+            }
+            day_labels = list(day_options.keys())
+            current_index = week_date_strs.index(st.session_state.shift_adjust_date)
+            selected_day_label = st.selectbox("調整する日を選択", day_labels, index=current_index)
+            st.session_state.shift_adjust_date = day_options[selected_day_label]
 
             selected_date = datetime.datetime.strptime(st.session_state.shift_adjust_date, "%Y/%m/%d").date()
             date_str = st.session_state.shift_adjust_date
@@ -1558,17 +1577,20 @@ else:
                 
                 st.write("")
                 st.markdown("出勤・退勤時刻")
-                col_s_h, col_s_m, col_e_h, col_e_m = st.columns(4)
-                
+                st.markdown("**出勤時刻**")
+                col_s_h, col_s_m = st.columns(2)
                 with col_s_h:
-                    work_start_h = st.number_input("出勤（時）", min_value=0, max_value=25, value=9)
+                    work_start_h = st.number_input("時", min_value=0, max_value=25, value=9, key="sh")
                 with col_s_m:
-                    work_start_m = st.number_input("出勤（分）", min_value=0, max_value=59, value=0)
+                    work_start_m = st.number_input("分", min_value=0, max_value=59, value=0, key="sm")
+
+                st.markdown("**退勤時刻**")
+                col_e_h, col_e_m = st.columns(2)
                 with col_e_h:
-                    work_end_h = st.number_input("退勤（時）", min_value=0, max_value=25, value=17)
+                    work_end_h = st.number_input("時", min_value=0, max_value=25, value=17, key="eh")
                 with col_e_m:
-                    work_end_m = st.number_input("退勤（分）", min_value=0, max_value=59, value=0)
-                
+                    work_end_m = st.number_input("分", min_value=0, max_value=59, value=0, key="em")
+
                 submit_record = st.form_submit_button("記録を保存")
                 
                 if submit_record:
