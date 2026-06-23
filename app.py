@@ -217,26 +217,28 @@ def render_day_chart(chart_data, compact=False, key=None):
         df_chart["レーン"] = df_chart["レーン"].astype(str)
         num_lanes = df_chart["レーン"].nunique()
         lane_order = [str(i) for i in range(num_lanes)]
+        df_chart["表示テキスト"] = df_chart["スタッフ名"] + "<br>" + df_chart["表示時間"]
 
         fig = px.bar(
             df_chart, x=df_chart["終了"] - df_chart["開始"], y="レーン", base="開始",
             orientation='h', color="レベル",
             color_discrete_map={"Lv.1":"#87CEEB","Lv.2":"#4682B4","Lv.3":"#191970"},
             hover_data={"スタッフ名":True, "開始":False, "終了":False, "表示時間":True, "レベル":True, "レーン":False},
-            text="スタッフ名",
+            text="表示テキスト",
             range_x=[6, 25]
         )
         fig.update_traces(textposition='inside', insidetextanchor='middle', textangle=0,
-                           textfont=dict(size=11, color="white", family="Arial Black"),
+                           textfont=dict(size=8 if compact else 10, color="white", family="Arial Black"),
                            marker_line_color="white", marker_line_width=2)
 
         # 1時間ごとに目盛を表示
         tick_hours = list(range(6, 26, 1))
         fig.update_layout(
             barmode='overlay',
-            xaxis=dict(title="", tickmode='array', tickvals=tick_hours, ticktext=[f"{i}:00" for i in tick_hours]),
-            height=(num_lanes * 36 + 60) if compact else max(300, num_lanes * 60),
-            margin=dict(l=0, r=0, t=20, b=0),
+            xaxis=dict(title="", tickmode='array', tickvals=tick_hours, ticktext=[f"{i}:00" for i in tick_hours],
+                       tickfont=dict(size=8 if compact else 10)),
+            height=(num_lanes * 32 + 30) if compact else max(180, num_lanes * 46),
+            margin=dict(l=0, r=0, t=6, b=0),
             showlegend=(not compact),
             yaxis={'categoryorder':'array', 'categoryarray': lane_order[::-1], 'title': '', 'showticklabels': False}
         )
@@ -762,44 +764,63 @@ else:
             
             st.divider()
 
-            # ========================================================
-            # 📊 週間グラフ（曜日ごとのミニグラフを一覧表示）
-            # ========================================================
-            st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週間シフト")
+            if "shift_view" not in st.session_state:
+                st.session_state.shift_view = "week"
 
-            # 曜日ごとのミニグラフを4列＋3列で並べる
-            for row_start in range(0, 7, 2):
-                mini_cols = st.columns(min(2, 7 - row_start))
-                for j, mcol in enumerate(mini_cols):
-                    i = row_start + j
-                    d_date = week_dates[i]
-                    with mcol:
-                        st.markdown(f"**{days[i]}曜日 ({d_date.strftime('%m/%d')})**")
+            # ========================================================
+            # 📊 週ビュー（曜日ごとのミニグラフ＋「調整」ボタン）
+            # ========================================================
+            if st.session_state.shift_view == "week":
+                st.subheader(f"📊 {target_monday.strftime('%Y/%m/%d')}〜 の週間シフト")
+
+                week_date_strs = [d.strftime("%Y/%m/%d") for d in week_dates]
+
+                for i, d_date in enumerate(week_dates):
+                    d_str = week_date_strs[i]
+                    holiday = jpholiday.is_holiday_name(d_date)
+                    label = f"**{days[i]} {d_date.strftime('%m/%d')}**"
+                    if holiday:
+                        label += f" 🎌{holiday}"
+
+                    col_graph, col_btn = st.columns([5, 1])
+                    with col_graph:
+                        st.markdown(label)
                         mini_chart_data, _, _ = build_day_chart_data(d_date, week_key)
                         render_day_chart(mini_chart_data, compact=True, key=f"mini_{week_key}_{d_date}")
+                    with col_btn:
+                        st.write("")
+                        st.write("")
+                        if st.button("調整→", key=f"goto_{d_str}", use_container_width=True):
+                            st.session_state.shift_adjust_date = d_str
+                            st.session_state.shift_view = "day"
+                            st.rerun()
 
-            st.divider()
+                    st.divider()
 
-            # --- このシフトを確定する/取り消すボタン ---
-            is_published = week_key in st.session_state.published_weeks
-            publish_label = "🚫 このシフトの確定を取り消す" if is_published else "✅ このシフトを確定する"
-            if st.button(publish_label, use_container_width=True, type=("secondary" if is_published else "primary")):
+                # --- このシフトを確定する/取り消すボタン ---
+                is_published = week_key in st.session_state.published_weeks
+                publish_label = "🚫 このシフトの確定を取り消す" if is_published else "✅ このシフトを確定する"
+                if st.button(publish_label, use_container_width=True, type=("secondary" if is_published else "primary")):
+                    if is_published:
+                        st.session_state.published_weeks.remove(week_key)
+                    else:
+                        st.session_state.published_weeks.append(week_key)
+                    save_data()
+
                 if is_published:
-                    st.session_state.published_weeks.remove(week_key)
+                    st.success(f"✅ {target_monday.strftime('%Y/%m/%d')}〜 の週は、現在確定済みです（スタッフ画面で確認できます）。")
                 else:
-                    st.session_state.published_weeks.append(week_key)
-                save_data()
+                    st.caption("※ まだこの週は確定されていません。")
 
-            if is_published:
-                st.success(f"✅ {target_monday.strftime('%Y/%m/%d')}〜 の週は、現在確定済みです（スタッフ画面で確認できます）。")
-            else:
-                st.caption("※ まだこの週は確定されていません。")
-
-            st.divider()
+                st.stop()
 
             # ========================================================
-            # 🔍 曜日を選んで詳細調整
+            # 🔍 日ビュー：曜日を選んで詳細調整
             # ========================================================
+            if st.button("← 週間に戻る"):
+                st.session_state.shift_view = "week"
+                st.rerun()
+
             st.subheader("🔍 曜日を選んで詳細を調整")
 
             week_date_strs = [d.strftime("%Y/%m/%d") for d in week_dates]
